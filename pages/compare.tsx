@@ -1,6 +1,13 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/router";
-import { ArrowLeft, Download, FileText, Send, Bot, Loader2 } from "lucide-react";
+import {
+  ArrowLeft,
+  Download,
+  FileText,
+  Send,
+  Bot,
+  Loader2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Card, CardHeader, CardTitle } from "@/components/ui/card";
@@ -13,16 +20,26 @@ interface Message {
   content: string;
 }
 
-const SPEC_ROWS: { key: keyof VehicleSpecData; label: string; section?: string; isNhtsa?: boolean }[] = [
-  { key: "engine",       label: "Engine",       section: "Performance" },
-  { key: "drivetrain",   label: "Drivetrain" },
+const SPEC_ROWS: {
+  key: keyof VehicleSpecData;
+  label: string;
+  section?: string;
+  isNhtsa?: boolean;
+}[] = [
+  { key: "engine", label: "Engine", section: "Performance" },
+  { key: "drivetrain", label: "Drivetrain" },
   { key: "transmission", label: "Transmission" },
-  { key: "mpg",          label: "MPG (city/hwy)" },
-  { key: "bodyClass",    label: "Body Class" },
-  { key: "overallSafety", label: "Overall Safety", section: "NHTSA Safety Ratings", isNhtsa: true },
-  { key: "frontCrash",  label: "Front Crash",  isNhtsa: true },
-  { key: "sideCrash",   label: "Side Crash",   isNhtsa: true },
-  { key: "rollover",    label: "Rollover",     isNhtsa: true },
+  { key: "mpg", label: "MPG (city/hwy)" },
+  { key: "bodyClass", label: "Body Class" },
+  {
+    key: "overallSafety",
+    label: "Overall Safety",
+    section: "NHTSA Safety Ratings",
+    isNhtsa: true,
+  },
+  { key: "frontCrash", label: "Front Crash", isNhtsa: true },
+  { key: "sideCrash", label: "Side Crash", isNhtsa: true },
+  { key: "rollover", label: "Rollover", isNhtsa: true },
 ];
 
 function vehicleLabel(id: string) {
@@ -41,16 +58,36 @@ export default function ComparePage() {
       ? vehiclesParam.split(",").filter(Boolean)
       : [];
 
-  const [specsData, setSpecsData] = useState<Record<string, VehicleSpecData>>({});
+  const [specsData, setSpecsData] = useState<Record<string, VehicleSpecData>>(
+    {},
+  );
   const [specsLoading, setSpecsLoading] = useState(false);
+  const specsAbortRef = useRef<AbortController | null>(null);
+  const chatAbortRef = useRef<AbortController | null>(null);
+
+  // Cancel in-flight requests when the component unmounts
+  useEffect(
+    () => () => {
+      specsAbortRef.current?.abort();
+      chatAbortRef.current?.abort();
+    },
+    [],
+  );
 
   useEffect(() => {
     if (!vehiclesParam || typeof vehiclesParam !== "string") return;
+    specsAbortRef.current?.abort();
+    const ac = new AbortController();
+    specsAbortRef.current = ac;
     setSpecsLoading(true);
-    fetch(`/api/specs?vehicles=${encodeURIComponent(vehiclesParam)}`)
+    fetch(`/api/specs?vehicles=${encodeURIComponent(vehiclesParam)}`, {
+      signal: ac.signal,
+    })
       .then((r) => r.json())
       .then(setSpecsData)
-      .catch(() => {})
+      .catch((err) => {
+        if (err.name !== "AbortError") console.error("specs fetch error", err);
+      })
       .finally(() => setSpecsLoading(false));
   }, [vehiclesParam]);
 
@@ -77,6 +114,10 @@ export default function ComparePage() {
         ? `The user is comparing these vehicles: ${vehicleIds.map(vehicleLabel).join(", ")}.`
         : "";
 
+    chatAbortRef.current?.abort();
+    const ac = new AbortController();
+    chatAbortRef.current = ac;
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -85,6 +126,7 @@ export default function ComparePage() {
           messages: [...messages, userMessage],
           vehicleContext,
         }),
+        signal: ac.signal,
       });
 
       if (!res.body) throw new Error("No response body");
@@ -126,6 +168,7 @@ export default function ComparePage() {
         }
       }
     } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return;
       setMessages((prev) => [
         ...prev,
         {
@@ -220,9 +263,30 @@ export default function ComparePage() {
 
               {/* Spec rows */}
               {specsLoading ? (
-                <div className="flex items-center gap-2 text-sm text-muted-foreground py-10">
-                  <Loader2 className="h-4 w-4 animate-spin" />
-                  Loading specs from NHTSA &amp; EPA…
+                <div className="flex flex-col items-center justify-center gap-4 py-16">
+                  <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+                  <p className="text-sm text-muted-foreground">
+                    Loading specs from NHTSA &amp; EPA…
+                  </p>
+                  <div className="w-full space-y-3 mt-2">
+                    {SPEC_ROWS.map((spec) => (
+                      <div
+                        key={spec.key}
+                        className="grid gap-4 items-center"
+                        style={{
+                          gridTemplateColumns: `200px repeat(${vehicleIds.length}, 1fr)`,
+                        }}
+                      >
+                        <div className="h-4 w-24 rounded bg-muted animate-pulse" />
+                        {vehicleIds.map((id) => (
+                          <div
+                            key={id}
+                            className="h-8 rounded bg-muted animate-pulse"
+                          />
+                        ))}
+                      </div>
+                    ))}
+                  </div>
                 </div>
               ) : (
                 SPEC_ROWS.map((spec) => (
@@ -250,16 +314,16 @@ export default function ComparePage() {
                             ? "Not tested"
                             : (value ?? "—");
                         return (
-                        <div
-                          key={id}
-                          className={`text-sm text-center py-2 px-3 rounded-md ${
-                            isLoaded && isEmpty && spec.isNhtsa
-                              ? "bg-muted/50 text-muted-foreground italic"
-                              : "bg-muted"
-                          }`}
-                        >
-                          {displayValue}
-                        </div>
+                          <div
+                            key={id}
+                            className={`text-sm text-center py-2 px-3 rounded-md ${
+                              isLoaded && isEmpty && spec.isNhtsa
+                                ? "bg-muted/50 text-muted-foreground italic"
+                                : "bg-muted"
+                            }`}
+                          >
+                            {displayValue}
+                          </div>
                         );
                       })}
                     </div>

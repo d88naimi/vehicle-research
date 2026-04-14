@@ -2,11 +2,41 @@ import type { NextApiRequest, NextApiResponse } from "next";
 
 // Popular makes to search across when query looks like a model name (e.g. "Camry", "Civic")
 const POPULAR_MAKES = [
-  "Toyota", "Honda", "Ford", "Chevrolet", "Tesla", "BMW", "Mercedes-Benz",
-  "Audi", "Volkswagen", "Hyundai", "Kia", "Subaru", "Mazda", "Nissan",
-  "Jeep", "Ram", "GMC", "Cadillac", "Lexus", "Acura", "Infiniti", "Volvo",
-  "Porsche", "Land Rover", "Jaguar", "Genesis", "Rivian", "Lucid", "Polestar",
-  "Lincoln", "Buick", "Dodge", "Mitsubishi", "Alfa Romeo", "Maserati",
+  "Toyota",
+  "Honda",
+  "Ford",
+  "Chevrolet",
+  "Tesla",
+  "BMW",
+  "Mercedes-Benz",
+  "Audi",
+  "Volkswagen",
+  "Hyundai",
+  "Kia",
+  "Subaru",
+  "Mazda",
+  "Nissan",
+  "Jeep",
+  "Ram",
+  "GMC",
+  "Cadillac",
+  "Lexus",
+  "Acura",
+  "Infiniti",
+  "Volvo",
+  "Porsche",
+  "Land Rover",
+  "Jaguar",
+  "Genesis",
+  "Rivian",
+  "Lucid",
+  "Polestar",
+  "Lincoln",
+  "Buick",
+  "Dodge",
+  "Mitsubishi",
+  "Alfa Romeo",
+  "Maserati",
 ];
 
 // Map of make aliases → canonical NHTSA make name
@@ -39,7 +69,7 @@ interface VehicleResult {
 
 async function fetchModelsForMakeYear(
   make: string,
-  year: number
+  year: number,
 ): Promise<NhtsaModel[]> {
   const key = `${make.toLowerCase()}-${year}`;
   if (modelCache.has(key)) return modelCache.get(key)!;
@@ -71,7 +101,7 @@ function toVehicleResult(item: NhtsaModel, year: number): VehicleResult {
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse
+  res: NextApiResponse,
 ) {
   if (req.method !== "GET") return res.status(405).end();
 
@@ -85,7 +115,10 @@ export default async function handler(
   // Extract year (e.g. "2024 Toyota Camry" or "Toyota Camry 2022")
   const yearMatch = raw.match(/\b(20\d{2}|19[89]\d)\b/);
   const year = yearMatch ? parseInt(yearMatch[1]) : new Date().getFullYear();
-  const withoutYear = raw.replace(yearMatch?.[0] ?? "", "").trim().toLowerCase();
+  const withoutYear = raw
+    .replace(yearMatch?.[0] ?? "", "")
+    .trim()
+    .toLowerCase();
 
   // Resolve make alias (e.g. "chevy" → "Chevrolet")
   const resolved = MAKE_ALIASES[withoutYear] ?? null;
@@ -93,9 +126,10 @@ export default async function handler(
   // Find makes that start with the query (e.g. "toy" → Toyota)
   const makeMatches = resolved
     ? [resolved]
-    : POPULAR_MAKES.filter((m) =>
-        m.toLowerCase().startsWith(withoutYear) ||
-        withoutYear.startsWith(m.toLowerCase())
+    : POPULAR_MAKES.filter(
+        (m) =>
+          m.toLowerCase().startsWith(withoutYear) ||
+          withoutYear.startsWith(m.toLowerCase()),
       );
 
   let results: VehicleResult[] = [];
@@ -103,27 +137,26 @@ export default async function handler(
   if (makeMatches.length > 0) {
     // Query NHTSA for each matching make
     const lists = await Promise.all(
-      makeMatches.slice(0, 4).map((make) => fetchModelsForMakeYear(make, year))
+      makeMatches.slice(0, 4).map((make) => fetchModelsForMakeYear(make, year)),
     );
     results = lists.flat().map((item) => toVehicleResult(item, year));
   } else if (withoutYear.length >= 2) {
     // No make match — treat the query as a model name fragment.
-    // Search all popular makes for the current year first.
-    const effectiveYear = yearMatch ? year : new Date().getFullYear();
+    // Search all popular makes for the queried year (defaults to current year).
     const lists = await Promise.all(
-      POPULAR_MAKES.map((make) => fetchModelsForMakeYear(make, effectiveYear))
+      POPULAR_MAKES.map((make) => fetchModelsForMakeYear(make, year)),
     );
     results = lists
       .flat()
       .filter((item) => item.Model_Name.toLowerCase().includes(withoutYear))
-      .map((item) => toVehicleResult(item, effectiveYear));
+      .map((item) => toVehicleResult(item, year));
 
     // If no results and no year was specified, try historical years for discontinued models
     if (results.length === 0 && !yearMatch) {
       const historicalYears = [2020, 2015, 2010, 2005, 2000];
       for (const hy of historicalYears) {
         const hLists = await Promise.all(
-          POPULAR_MAKES.map((make) => fetchModelsForMakeYear(make, hy))
+          POPULAR_MAKES.map((make) => fetchModelsForMakeYear(make, hy)),
         );
         const hResults = hLists
           .flat()

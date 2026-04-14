@@ -14,11 +14,13 @@ export default async function handler(
     return res.status(400).json({ error: "Missing vehicles query param" });
   }
 
-  // Derive the base URL from the incoming request
+  // Derive the base URL: prefer an explicit env var (set in Vercel dashboard),
+  // then fall back to the request headers. The header-based fallback is only
+  // used in local dev — in production APP_URL should always be set.
   const protocol = req.headers["x-forwarded-proto"] ?? "http";
   const host =
     req.headers["x-forwarded-host"] ?? req.headers.host ?? "localhost:3000";
-  const baseUrl = `${protocol}://${host}`;
+  const baseUrl = process.env.APP_URL ?? `${protocol}://${host}`;
 
   const targetUrl = `${baseUrl}/compare?vehicles=${encodeURIComponent(vehicles)}&print=1`;
 

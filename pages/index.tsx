@@ -1,6 +1,14 @@
 import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/router";
-import { Search, ArrowRight, GitCompare, Bot, Send, X, Loader2 } from "lucide-react";
+import {
+  Search,
+  ArrowRight,
+  GitCompare,
+  Bot,
+  Send,
+  X,
+  Loader2,
+} from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -24,7 +32,6 @@ interface Vehicle {
   year: number;
   category: string;
 }
-
 
 const FEATURED_VEHICLES = [
   {
@@ -87,28 +94,41 @@ export default function HomePage() {
   const searchRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const fetchSuggestions = useCallback(async (q: string) => {
-    if (q.trim().length < 2) { setSuggestions([]); return; }
-    setSearchLoading(true);
-    try {
-      const res = await fetch(`/api/vehicles/search?q=${encodeURIComponent(q)}`);
-      const data: Vehicle[] = await res.json();
-      const alreadyShown = new Set([
-        ...FEATURED_VEHICLES.map((v) => v.id),
-        ...addedVehicles.map((v) => v.id),
-      ]);
-      setSuggestions(data.filter((v) => !alreadyShown.has(v.id)));
-    } catch {
-      setSuggestions([]);
-    } finally {
-      setSearchLoading(false);
-    }
-  }, [addedVehicles]);
+  const fetchSuggestions = useCallback(
+    async (q: string) => {
+      if (q.trim().length < 2) {
+        setSuggestions([]);
+        return;
+      }
+      setSearchLoading(true);
+      try {
+        const res = await fetch(
+          `/api/vehicles/search?q=${encodeURIComponent(q)}`,
+        );
+        const data: Vehicle[] = await res.json();
+        const alreadyShown = new Set([
+          ...FEATURED_VEHICLES.map((v) => v.id),
+          ...addedVehicles.map((v) => v.id),
+        ]);
+        setSuggestions(data.filter((v) => !alreadyShown.has(v.id)));
+      } catch {
+        setSuggestions([]);
+      } finally {
+        setSearchLoading(false);
+      }
+    },
+    [addedVehicles],
+  );
 
   useEffect(() => {
     if (debounceRef.current) clearTimeout(debounceRef.current);
-    debounceRef.current = setTimeout(() => fetchSuggestions(vehicleSearch), 350);
-    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+    debounceRef.current = setTimeout(
+      () => fetchSuggestions(vehicleSearch),
+      350,
+    );
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
   }, [vehicleSearch, fetchSuggestions]);
 
   useEffect(() => {
@@ -122,7 +142,9 @@ export default function HomePage() {
   }, []);
 
   function addVehicleToGrid(vehicle: Vehicle) {
-    setAddedVehicles((prev) => prev.some((v) => v.id === vehicle.id) ? prev : [...prev, vehicle]);
+    setAddedVehicles((prev) =>
+      prev.some((v) => v.id === vehicle.id) ? prev : [...prev, vehicle],
+    );
     setVehicleSearch("");
     setShowSuggestions(false);
   }
@@ -138,6 +160,15 @@ export default function HomePage() {
   const [chatInput, setChatInput] = useState("");
   const [chatLoading, setChatLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatAbortRef = useRef<AbortController | null>(null);
+
+  // Cancel in-flight chat request on unmount
+  useEffect(
+    () => () => {
+      chatAbortRef.current?.abort();
+    },
+    [],
+  );
 
   useEffect(() => {
     messagesEndRef.current?.scrollIntoView({ behavior: "smooth" });
@@ -152,6 +183,10 @@ export default function HomePage() {
     setChatInput("");
     setChatLoading(true);
 
+    chatAbortRef.current?.abort();
+    const ac = new AbortController();
+    chatAbortRef.current = ac;
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -161,6 +196,7 @@ export default function HomePage() {
           vehicleContext:
             "The user is looking for vehicle purchase recommendations. Help them narrow down the best vehicle for their needs by asking about budget, use case, priorities (reliability, performance, fuel economy, cargo space, etc.), and family size. Suggest specific makes and models with brief reasoning. When you recommend a vehicle, mention it by its full name (e.g. '2024 Toyota RAV4').",
         }),
+        signal: ac.signal,
       });
 
       if (!res.body) throw new Error("No response body");
@@ -199,7 +235,8 @@ export default function HomePage() {
           } catch {}
         }
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return;
       setMessages((prev) => [
         ...prev,
         {
@@ -217,7 +254,9 @@ export default function HomePage() {
     if (!query.trim()) return;
     // Try to resolve a canonical NHTSA-backed slug first (gives compare/specs a proper ID)
     try {
-      const res = await fetch(`/api/vehicles/search?q=${encodeURIComponent(query.trim())}`);
+      const res = await fetch(
+        `/api/vehicles/search?q=${encodeURIComponent(query.trim())}`,
+      );
       const results: Vehicle[] = await res.json();
       if (results.length > 0) {
         router.push(`/vehicle/${results[0].id}`);
@@ -334,9 +373,13 @@ export default function HomePage() {
                     }}
                   >
                     <span>
-                      <span className="font-medium">{v.year} {v.make} {v.model}</span>
+                      <span className="font-medium">
+                        {v.year} {v.make} {v.model}
+                      </span>
                     </span>
-                    <Badge variant="secondary" className="shrink-0 text-xs">{v.category}</Badge>
+                    <Badge variant="secondary" className="shrink-0 text-xs">
+                      {v.category}
+                    </Badge>
                   </button>
                 ))}
               </div>

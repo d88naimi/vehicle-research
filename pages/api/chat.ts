@@ -44,21 +44,49 @@ export default async function handler(
     return res.status(400).json({ error: "messages array is required" });
   }
 
+  // Validate each message is well-formed and cap content length
+  const MAX_MSG_LENGTH = 8000;
+  const validRoles = new Set(["user", "assistant"]);
+  const safeMessages = messages
+    .slice(-20) // keep only the last 20 to prevent token abuse
+    .filter(
+      (m) =>
+        m &&
+        typeof m.role === "string" &&
+        validRoles.has(m.role) &&
+        typeof m.content === "string" &&
+        m.content.length > 0,
+    )
+    .map((m) => ({
+      role: m.role,
+      content: m.content.slice(0, MAX_MSG_LENGTH),
+    }));
+
+  if (safeMessages.length === 0) {
+    return res.status(400).json({ error: "No valid messages provided" });
+  }
+
+  // Truncate vehicleContext to prevent overly long or injected system-prompt additions
+  const safeContext =
+    typeof vehicleContext === "string"
+      ? vehicleContext.slice(0, 500)
+      : undefined;
+
   res.setHeader("Content-Type", "text/event-stream");
   res.setHeader("Cache-Control", "no-cache, no-transform");
   res.setHeader("Connection", "keep-alive");
   res.setHeader("X-Accel-Buffering", "no");
 
   try {
-    const systemText = vehicleContext
-      ? `${SYSTEM_PROMPT}\n\n${vehicleContext}`
+    const systemText = safeContext
+      ? `${SYSTEM_PROMPT}\n\n${safeContext}`
       : SYSTEM_PROMPT;
 
     const stream = anthropic.messages.stream({
       model: "claude-opus-4-5",
       max_tokens: 1024,
       system: systemText,
-      messages,
+      messages: safeMessages,
     });
 
     for await (const event of stream) {

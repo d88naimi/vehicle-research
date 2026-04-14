@@ -1,5 +1,9 @@
 import type { NextApiRequest, NextApiResponse } from "next";
 
+export const config = {
+  maxDuration: 60, // specs fetches many external APIs; needs more than the 10s default
+};
+
 // Same make list as search.ts — used to parse vehicle ID slugs
 const MAKES_BY_SLUG: Record<string, string> = {
   "alfa-romeo": "Alfa Romeo",
@@ -41,7 +45,7 @@ const MAKES_BY_SLUG: Record<string, string> = {
 
 // Sorted longest-first so "land-rover" matches before "land"
 const MAKE_SLUGS_SORTED = Object.keys(MAKES_BY_SLUG).sort(
-  (a, b) => b.length - a.length
+  (a, b) => b.length - a.length,
 );
 
 interface NhtsaModel {
@@ -49,23 +53,31 @@ interface NhtsaModel {
   Model_Name: string;
 }
 
+// Module-level cache: "make-year" → models. Prevents redundant vPIC calls within
+// a single request when multiple slugs share the same make/year.
+const vpicCache = new Map<string, NhtsaModel[]>();
+
 async function fetchModelsForMakeYear(
   make: string,
-  year: number
+  year: number,
 ): Promise<NhtsaModel[]> {
+  const key = `${make.toLowerCase()}-${year}`;
+  if (vpicCache.has(key)) return vpicCache.get(key)!;
   try {
     const url = `https://vpic.nhtsa.dot.gov/api/vehicles/GetModelsForMakeYear/make/${encodeURIComponent(make)}/modelyear/${year}?format=json`;
     const res = await fetch(url, { signal: AbortSignal.timeout(6000) });
     if (!res.ok) return [];
     const data = await res.json();
-    return data.Results ?? [];
+    const results: NhtsaModel[] = data.Results ?? [];
+    vpicCache.set(key, results);
+    return results;
   } catch {
     return [];
   }
 }
 
 function parseVehicleId(
-  id: string
+  id: string,
 ): { make: string; modelSlug: string; year: number } | null {
   // Standard format: {make-slug}-{model-slug}-{year}  e.g. "acura-integra-2026"
   const yearMatch = id.match(/-(\d{4})$/);
@@ -104,7 +116,7 @@ function parseVehicleId(
 async function resolveModelName(
   make: string,
   modelSlug: string,
-  year: number
+  year: number,
 ): Promise<string> {
   const models = await fetchModelsForMakeYear(make, year);
   const target = modelSlug.replace(/-/g, "").toLowerCase();
@@ -152,14 +164,14 @@ function normModel(s: string) {
 async function resolveEpaModel(
   make: string,
   model: string,
-  year: number
+  year: number,
 ): Promise<string | null> {
   const listUrl = `https://www.fueleconomy.gov/ws/rest/vehicle/menu/model?year=${year}&make=${encodeURIComponent(make)}`;
   const listRes = await fetch(listUrl, { signal: AbortSignal.timeout(8000) });
   if (!listRes.ok) return null;
   const listXml = await listRes.text();
   const epaModels = [...listXml.matchAll(/<text>([^<]+)<\/text>/g)].map(
-    (m) => m[1]
+    (m) => m[1],
   );
   const target = normModel(model);
   const exact = epaModels.find((m) => normModel(m) === target);
@@ -171,14 +183,14 @@ async function resolveEpaModel(
 async function fetchEpaData(
   make: string,
   model: string,
-  year: number
+  year: number,
 ): Promise<EpaData | null> {
   try {
     // First try exact model name (works for Camry, Outback, etc.)
     let optionsXml: string;
     const directRes = await fetch(
       `https://www.fueleconomy.gov/ws/rest/vehicle/menu/options?year=${year}&make=${encodeURIComponent(make)}&model=${encodeURIComponent(model)}`,
-      { signal: AbortSignal.timeout(8000) }
+      { signal: AbortSignal.timeout(8000) },
     );
     if (!directRes.ok) return null;
     optionsXml = await directRes.text();
@@ -189,7 +201,7 @@ async function fetchEpaData(
       if (!epaModel) return null;
       const fallbackRes = await fetch(
         `https://www.fueleconomy.gov/ws/rest/vehicle/menu/options?year=${year}&make=${encodeURIComponent(make)}&model=${encodeURIComponent(epaModel)}`,
-        { signal: AbortSignal.timeout(8000) }
+        { signal: AbortSignal.timeout(8000) },
       );
       if (!fallbackRes.ok) return null;
       optionsXml = await fallbackRes.text();
@@ -200,7 +212,7 @@ async function fetchEpaData(
 
     const vehicleRes = await fetch(
       `https://www.fueleconomy.gov/ws/rest/vehicle/${vehicleId}`,
-      { signal: AbortSignal.timeout(8000) }
+      { signal: AbortSignal.timeout(8000) },
     );
     if (!vehicleRes.ok) return null;
     const xml = await vehicleRes.text();
@@ -230,7 +242,7 @@ interface NhtsaRatings {
 async function fetchNhtsaRatings(
   make: string,
   model: string,
-  year: number
+  year: number,
 ): Promise<NhtsaRatings | null> {
   try {
     const variantsUrl = `https://api.nhtsa.dot.gov/SafetyRatings/modelyear/${year}/make/${encodeURIComponent(make)}/model/${encodeURIComponent(model)}`;
@@ -254,7 +266,9 @@ async function fetchNhtsaRatings(
           allMakeData.Results ?? [];
         const target = model.replace(/[\s\-\/]/g, "").toLowerCase();
         const match = allModels.find((m) =>
-          m.Model.replace(/[\s\-\/]/g, "").toLowerCase().startsWith(target)
+          m.Model.replace(/[\s\-\/]/g, "")
+            .toLowerCase()
+            .startsWith(target),
         );
         if (match) variants = [match];
       }
@@ -264,7 +278,7 @@ async function fetchNhtsaRatings(
 
     const ratingsRes = await fetch(
       `https://api.nhtsa.dot.gov/SafetyRatings/VehicleId/${variants[0].VehicleId}`,
-      { signal: AbortSignal.timeout(8000) }
+      { signal: AbortSignal.timeout(8000) },
     );
     if (!ratingsRes.ok) return null;
     const ratingsData = await ratingsRes.json();
@@ -276,31 +290,66 @@ async function fetchNhtsaRatings(
 
 // Same popular makes list used in search.ts — for model-name-only slug resolution
 const POPULAR_MAKES_LIST = [
-  "Toyota", "Honda", "Ford", "Chevrolet", "Tesla", "BMW", "Mercedes-Benz",
-  "Audi", "Volkswagen", "Hyundai", "Kia", "Subaru", "Mazda", "Nissan",
-  "Jeep", "Ram", "GMC", "Cadillac", "Lexus", "Acura", "Infiniti", "Volvo",
-  "Porsche", "Land Rover", "Jaguar", "Genesis", "Rivian", "Lucid", "Polestar",
-  "Lincoln", "Buick", "Dodge", "Mitsubishi", "Alfa Romeo", "Maserati",
+  "Toyota",
+  "Honda",
+  "Ford",
+  "Chevrolet",
+  "Tesla",
+  "BMW",
+  "Mercedes-Benz",
+  "Audi",
+  "Volkswagen",
+  "Hyundai",
+  "Kia",
+  "Subaru",
+  "Mazda",
+  "Nissan",
+  "Jeep",
+  "Ram",
+  "GMC",
+  "Cadillac",
+  "Lexus",
+  "Acura",
+  "Infiniti",
+  "Volvo",
+  "Porsche",
+  "Land Rover",
+  "Jaguar",
+  "Genesis",
+  "Rivian",
+  "Lucid",
+  "Polestar",
+  "Lincoln",
+  "Buick",
+  "Dodge",
+  "Mitsubishi",
+  "Alfa Romeo",
+  "Maserati",
 ];
 
 // When the parsed slug has no recognized make, search vPIC across all popular makes.
-// Returns { make, model } if found, or null.
+// Uses batches of 8 so we can exit early after the first batch that yields a match
+// instead of always waiting for all 35 makes.
 async function resolveMakeAndModel(
   modelSlug: string,
-  year: number
+  year: number,
 ): Promise<{ make: string; model: string } | null> {
   const target = modelSlug.replace(/-/g, "").toLowerCase();
-  const lists = await Promise.all(
-    POPULAR_MAKES_LIST.map(async (make) => {
-      const models = await fetchModelsForMakeYear(make, year);
-      return models.map((m) => ({ make, model: m.Model_Name }));
-    })
-  );
-  for (const list of lists) {
-    for (const item of list) {
-      const normalized = item.model.replace(/[\s\-\/]/g, "").toLowerCase();
-      if (normalized === target || normalized.startsWith(target)) {
-        return item;
+  const BATCH_SIZE = 8;
+  for (let i = 0; i < POPULAR_MAKES_LIST.length; i += BATCH_SIZE) {
+    const batch = POPULAR_MAKES_LIST.slice(i, i + BATCH_SIZE);
+    const lists = await Promise.all(
+      batch.map(async (make) => {
+        const models = await fetchModelsForMakeYear(make, year);
+        return models.map((m) => ({ make, model: m.Model_Name }));
+      }),
+    );
+    for (const list of lists) {
+      for (const item of list) {
+        const normalized = item.model.replace(/[\s\-\/]/g, "").toLowerCase();
+        if (normalized === target || normalized.startsWith(target)) {
+          return item;
+        }
       }
     }
   }
@@ -327,7 +376,7 @@ function stars(rating: string): string {
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse
+  res: NextApiResponse,
 ) {
   if (req.method !== "GET") return res.status(405).end();
 
@@ -347,7 +396,10 @@ export default async function handler(
 
       if (!make) {
         // No recognized make in slug — search vPIC to find the real make + model
-        const resolved = await resolveMakeAndModel(parsed.modelSlug, parsed.year);
+        const resolved = await resolveMakeAndModel(
+          parsed.modelSlug,
+          parsed.year,
+        );
         if (!resolved) return;
         make = resolved.make;
         modelName = resolved.model;
@@ -381,7 +433,7 @@ export default async function handler(
         sideCrash: stars(nhtsa?.SideCrashRating ?? ""),
         rollover: stars(nhtsa?.RolloverRating ?? ""),
       };
-    })
+    }),
   );
 
   // Cache for 24 h — specs don't change often

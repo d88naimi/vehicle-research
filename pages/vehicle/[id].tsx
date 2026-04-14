@@ -39,6 +39,17 @@ export default function VehiclePage() {
   const [input, setInput] = useState("");
   const [loading, setLoading] = useState(false);
   const messagesEndRef = useRef<HTMLDivElement>(null);
+  const chatAbortRef = useRef<AbortController | null>(null);
+  const dataAbortRef = useRef<AbortController | null>(null);
+
+  // Cancel in-flight requests when the component unmounts
+  useEffect(
+    () => () => {
+      chatAbortRef.current?.abort();
+      dataAbortRef.current?.abort();
+    },
+    [],
+  );
 
   const [videos, setVideos] = useState<YouTubeVideo[]>([]);
   const [videosLoading, setVideosLoading] = useState(false);
@@ -56,26 +67,34 @@ export default function VehiclePage() {
     if (!vehicleId) return;
     const query = `${formatVehicleTitle(vehicleId)} review`;
 
+    dataAbortRef.current?.abort();
+    const ac = new AbortController();
+    dataAbortRef.current = ac;
+
     setVideosLoading(true);
     setVideosError(null);
-    fetch(`/api/youtube?q=${encodeURIComponent(query)}`)
+    fetch(`/api/youtube?q=${encodeURIComponent(query)}`, { signal: ac.signal })
       .then((res) => res.json())
       .then((data) => {
         if (data.error) throw new Error(data.error);
         setVideos(data.videos ?? []);
       })
-      .catch((err) => setVideosError(err.message))
+      .catch((err) => {
+        if (err.name !== "AbortError") setVideosError(err.message);
+      })
       .finally(() => setVideosLoading(false));
 
     setArticlesLoading(true);
     setArticlesError(null);
-    fetch(`/api/articles?q=${encodeURIComponent(query)}`)
+    fetch(`/api/articles?q=${encodeURIComponent(query)}`, { signal: ac.signal })
       .then((res) => res.json())
       .then((data) => {
         if (data.error) throw new Error(data.error);
         setArticles(data.articles ?? []);
       })
-      .catch((err) => setArticlesError(err.message))
+      .catch((err) => {
+        if (err.name !== "AbortError") setArticlesError(err.message);
+      })
       .finally(() => setArticlesLoading(false));
   }, [vehicleId]);
 
@@ -90,6 +109,10 @@ export default function VehiclePage() {
 
     const vehicleContext = `The user is researching the ${formatVehicleTitle(vehicleId)}.`;
 
+    chatAbortRef.current?.abort();
+    const ac = new AbortController();
+    chatAbortRef.current = ac;
+
     try {
       const res = await fetch("/api/chat", {
         method: "POST",
@@ -98,6 +121,7 @@ export default function VehiclePage() {
           messages: [...messages, userMessage],
           vehicleContext,
         }),
+        signal: ac.signal,
       });
 
       if (!res.body) throw new Error("No response body");
@@ -123,7 +147,10 @@ export default function VehiclePage() {
             if (parsed.error) {
               setMessages((prev) => [
                 ...prev.slice(0, -1),
-                { role: "assistant", content: "Sorry, something went wrong. Please try again." },
+                {
+                  role: "assistant",
+                  content: "Sorry, something went wrong. Please try again.",
+                },
               ]);
               break;
             }
@@ -135,7 +162,8 @@ export default function VehiclePage() {
           } catch {}
         }
       }
-    } catch {
+    } catch (err) {
+      if (err instanceof Error && err.name === "AbortError") return;
       setMessages((prev) => [
         ...prev,
         {

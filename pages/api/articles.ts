@@ -60,8 +60,8 @@ export default async function handler(
   const data = await tavilyRes.json();
   const results: TavilyResult[] = data.results ?? [];
 
-  const articles: Article[] = results.map((r, i) => ({
-    id: String(i),
+  const articles: Article[] = results.map((r) => ({
+    id: Buffer.from(r.url).toString("base64url").slice(0, 16),
     title: r.title,
     source: extractDomain(r.url),
     date: r.published_date ? formatDate(r.published_date) : "",
