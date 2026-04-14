@@ -253,7 +253,7 @@ export default function HomePage() {
                     </CardDescription>
                     <Button
                       variant="ghost"
-                      className="mt-3 p-0 h-auto text-sm font-medium"
+                      className="mt-3 px-4 py-2 text-sm font-medium"
                       onClick={() => router.push(`/vehicle/${vehicle.id}`)}
                     >
                       View research →

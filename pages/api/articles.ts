@@ -18,7 +18,7 @@ interface TavilyResult {
 
 export default async function handler(
   req: NextApiRequest,
-  res: NextApiResponse
+  res: NextApiResponse,
 ) {
   if (req.method !== "GET") {
     return res.status(405).json({ error: "Method not allowed" });
@@ -66,7 +66,8 @@ export default async function handler(
     source: extractDomain(r.url),
     date: r.published_date ? formatDate(r.published_date) : "",
     url: r.url,
-    snippet: r.content.slice(0, 160).trimEnd() + (r.content.length > 160 ? "…" : ""),
+    snippet:
+      r.content.slice(0, 160).trimEnd() + (r.content.length > 160 ? "…" : ""),
   }));
 
   return res.status(200).json({ articles });
