@@ -1,6 +1,10 @@
 import Anthropic from "@anthropic-ai/sdk";
 import type { NextApiRequest, NextApiResponse } from "next";
 
+export const config = {
+  maxDuration: 60, // seconds — needed for streaming on Vercel
+};
+
 const anthropic = new Anthropic({
   apiKey: process.env.ANTHROPIC_API_KEY,
 });
