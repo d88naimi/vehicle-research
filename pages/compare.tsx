@@ -1,71 +1,28 @@
 import { useState, useRef, useEffect } from "react";
 import { useRouter } from "next/router";
-import { ArrowLeft, Download, FileText, Send, Bot } from "lucide-react";
+import { ArrowLeft, Download, FileText, Send, Bot, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Card, CardHeader, CardTitle } from "@/components/ui/card";
 import { Badge } from "@/components/ui/badge";
 import { Separator } from "@/components/ui/separator";
+import type { VehicleSpecData } from "@/pages/api/specs";
 
 interface Message {
   role: "user" | "assistant";
   content: string;
 }
 
-interface VehicleSpec {
-  label: string;
-  values: Record<string, string>;
-}
-
-const MOCK_SPECS: VehicleSpec[] = [
-  {
-    label: "Engine",
-    values: {
-      "toyota-camry-2024": "2.5L 4-cyl",
-      "honda-cr-v-2024": "1.5L Turbo",
-      "ford-f150-2024": "2.7L EcoBoost V6",
-    },
-  },
-  {
-    label: "Horsepower",
-    values: {
-      "toyota-camry-2024": "203 hp",
-      "honda-cr-v-2024": "190 hp",
-      "ford-f150-2024": "325 hp",
-    },
-  },
-  {
-    label: "MPG (city/hwy)",
-    values: {
-      "toyota-camry-2024": "28/39",
-      "honda-cr-v-2024": "28/34",
-      "ford-f150-2024": "20/26",
-    },
-  },
-  {
-    label: "Base Price",
-    values: {
-      "toyota-camry-2024": "$27,415",
-      "honda-cr-v-2024": "$30,700",
-      "ford-f150-2024": "$36,075",
-    },
-  },
-  {
-    label: "Cargo Space",
-    values: {
-      "toyota-camry-2024": "15.1 cu ft",
-      "honda-cr-v-2024": "39.3 cu ft",
-      "ford-f150-2024": "52.8 cu ft",
-    },
-  },
-  {
-    label: "Warranty",
-    values: {
-      "toyota-camry-2024": "3yr/36k basic",
-      "honda-cr-v-2024": "3yr/36k basic",
-      "ford-f150-2024": "3yr/36k basic",
-    },
-  },
+const SPEC_ROWS: { key: keyof VehicleSpecData; label: string; section?: string; isNhtsa?: boolean }[] = [
+  { key: "engine",       label: "Engine",       section: "Performance" },
+  { key: "drivetrain",   label: "Drivetrain" },
+  { key: "transmission", label: "Transmission" },
+  { key: "mpg",          label: "MPG (city/hwy)" },
+  { key: "bodyClass",    label: "Body Class" },
+  { key: "overallSafety", label: "Overall Safety", section: "NHTSA Safety Ratings", isNhtsa: true },
+  { key: "frontCrash",  label: "Front Crash",  isNhtsa: true },
+  { key: "sideCrash",   label: "Side Crash",   isNhtsa: true },
+  { key: "rollover",    label: "Rollover",     isNhtsa: true },
 ];
 
 function vehicleLabel(id: string) {
@@ -83,6 +40,19 @@ export default function ComparePage() {
     typeof vehiclesParam === "string"
       ? vehiclesParam.split(",").filter(Boolean)
       : [];
+
+  const [specsData, setSpecsData] = useState<Record<string, VehicleSpecData>>({});
+  const [specsLoading, setSpecsLoading] = useState(false);
+
+  useEffect(() => {
+    if (!vehiclesParam || typeof vehiclesParam !== "string") return;
+    setSpecsLoading(true);
+    fetch(`/api/specs?vehicles=${encodeURIComponent(vehiclesParam)}`)
+      .then((r) => r.json())
+      .then(setSpecsData)
+      .catch(() => {})
+      .finally(() => setSpecsLoading(false));
+  }, [vehiclesParam]);
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [input, setInput] = useState("");
@@ -140,7 +110,10 @@ export default function ComparePage() {
             if (parsed.error) {
               setMessages((prev) => [
                 ...prev.slice(0, -1),
-                { role: "assistant", content: "Sorry, something went wrong. Please try again." },
+                {
+                  role: "assistant",
+                  content: "Sorry, something went wrong. Please try again.",
+                },
               ]);
               break;
             }
@@ -246,27 +219,53 @@ export default function ComparePage() {
               <Separator />
 
               {/* Spec rows */}
-              {MOCK_SPECS.map((spec) => (
-                <div
-                  key={spec.label}
-                  className="grid gap-4 items-center"
-                  style={{
-                    gridTemplateColumns: `200px repeat(${vehicleIds.length}, 1fr)`,
-                  }}
-                >
-                  <div className="text-sm font-medium text-muted-foreground">
-                    {spec.label}
-                  </div>
-                  {vehicleIds.map((id) => (
-                    <div
-                      key={id}
-                      className="text-sm text-center py-2 px-3 bg-muted rounded-md"
-                    >
-                      {spec.values[id] ?? "—"}
-                    </div>
-                  ))}
+              {specsLoading ? (
+                <div className="flex items-center gap-2 text-sm text-muted-foreground py-10">
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                  Loading specs from NHTSA &amp; EPA…
                 </div>
-              ))}
+              ) : (
+                SPEC_ROWS.map((spec) => (
+                  <div key={spec.key}>
+                    {spec.section && (
+                      <p className="text-xs font-semibold uppercase tracking-wide text-muted-foreground mt-6 mb-2">
+                        {spec.section}
+                      </p>
+                    )}
+                    <div
+                      className="grid gap-4 items-center"
+                      style={{
+                        gridTemplateColumns: `200px repeat(${vehicleIds.length}, 1fr)`,
+                      }}
+                    >
+                      <div className="text-sm font-medium text-muted-foreground">
+                        {spec.label}
+                      </div>
+                      {vehicleIds.map((id) => {
+                        const value = specsData[id]?.[spec.key];
+                        const isEmpty = value === "—" || value === undefined;
+                        const isLoaded = id in specsData;
+                        const displayValue =
+                          isLoaded && isEmpty && spec.isNhtsa
+                            ? "Not tested"
+                            : (value ?? "—");
+                        return (
+                        <div
+                          key={id}
+                          className={`text-sm text-center py-2 px-3 rounded-md ${
+                            isLoaded && isEmpty && spec.isNhtsa
+                              ? "bg-muted/50 text-muted-foreground italic"
+                              : "bg-muted"
+                          }`}
+                        >
+                          {displayValue}
+                        </div>
+                        );
+                      })}
+                    </div>
+                  </div>
+                ))
+              )}
             </div>
           )}
         </div>
@@ -277,7 +276,7 @@ export default function ComparePage() {
             <Bot className="h-4 w-4" />
             <span className="font-medium text-sm">AI Research Assistant</span>
             <Badge variant="secondary" className="ml-auto text-xs">
-              GPT-4
+              Claude
             </Badge>
           </div>
 

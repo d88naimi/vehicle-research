@@ -1,6 +1,6 @@
-import { useState, useRef, useEffect } from "react";
+import { useState, useRef, useEffect, useCallback } from "react";
 import { useRouter } from "next/router";
-import { Search, ArrowRight, GitCompare, Bot, Send } from "lucide-react";
+import { Search, ArrowRight, GitCompare, Bot, Send, X, Loader2 } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import {
@@ -16,6 +16,15 @@ interface Message {
   role: "user" | "assistant";
   content: string;
 }
+
+interface Vehicle {
+  id: string;
+  make: string;
+  model: string;
+  year: number;
+  category: string;
+}
+
 
 const FEATURED_VEHICLES = [
   {
@@ -62,10 +71,68 @@ const FEATURED_VEHICLES = [
   },
 ];
 
+function slugify(text: string) {
+  return text.trim().toLowerCase().replace(/\s+/g, "-");
+}
+
 export default function HomePage() {
   const router = useRouter();
   const [query, setQuery] = useState("");
   const [compareList, setCompareList] = useState<string[]>([]);
+  const [addedVehicles, setAddedVehicles] = useState<Vehicle[]>([]);
+  const [vehicleSearch, setVehicleSearch] = useState("");
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [suggestions, setSuggestions] = useState<Vehicle[]>([]);
+  const [searchLoading, setSearchLoading] = useState(false);
+  const searchRef = useRef<HTMLDivElement>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const fetchSuggestions = useCallback(async (q: string) => {
+    if (q.trim().length < 2) { setSuggestions([]); return; }
+    setSearchLoading(true);
+    try {
+      const res = await fetch(`/api/vehicles/search?q=${encodeURIComponent(q)}`);
+      const data: Vehicle[] = await res.json();
+      const alreadyShown = new Set([
+        ...FEATURED_VEHICLES.map((v) => v.id),
+        ...addedVehicles.map((v) => v.id),
+      ]);
+      setSuggestions(data.filter((v) => !alreadyShown.has(v.id)));
+    } catch {
+      setSuggestions([]);
+    } finally {
+      setSearchLoading(false);
+    }
+  }, [addedVehicles]);
+
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => fetchSuggestions(vehicleSearch), 350);
+    return () => { if (debounceRef.current) clearTimeout(debounceRef.current); };
+  }, [vehicleSearch, fetchSuggestions]);
+
+  useEffect(() => {
+    function handleClickOutside(e: MouseEvent) {
+      if (searchRef.current && !searchRef.current.contains(e.target as Node)) {
+        setShowSuggestions(false);
+      }
+    }
+    document.addEventListener("mousedown", handleClickOutside);
+    return () => document.removeEventListener("mousedown", handleClickOutside);
+  }, []);
+
+  function addVehicleToGrid(vehicle: Vehicle) {
+    setAddedVehicles((prev) => prev.some((v) => v.id === vehicle.id) ? prev : [...prev, vehicle]);
+    setVehicleSearch("");
+    setShowSuggestions(false);
+  }
+
+  function removeAddedVehicle(id: string) {
+    setAddedVehicles((prev) => prev.filter((v) => v.id !== id));
+    setCompareList((prev) => prev.filter((v) => v !== id));
+  }
+
+  const allGridVehicles = [...FEATURED_VEHICLES, ...addedVehicles];
 
   const [messages, setMessages] = useState<Message[]>([]);
   const [chatInput, setChatInput] = useState("");
@@ -117,7 +184,10 @@ export default function HomePage() {
             if (parsed.error) {
               setMessages((prev) => [
                 ...prev.slice(0, -1),
-                { role: "assistant", content: "Sorry, something went wrong. Please try again." },
+                {
+                  role: "assistant",
+                  content: "Sorry, something went wrong. Please try again.",
+                },
               ]);
               break;
             }
@@ -142,13 +212,20 @@ export default function HomePage() {
     }
   }
 
-  function handleSearch(e: React.FormEvent) {
+  async function handleSearch(e: React.FormEvent) {
     e.preventDefault();
-    if (query.trim()) {
-      router.push(
-        `/vehicle/${encodeURIComponent(query.trim().toLowerCase().replace(/\s+/g, "-"))}`,
-      );
-    }
+    if (!query.trim()) return;
+    // Try to resolve a canonical NHTSA-backed slug first (gives compare/specs a proper ID)
+    try {
+      const res = await fetch(`/api/vehicles/search?q=${encodeURIComponent(query.trim())}`);
+      const results: Vehicle[] = await res.json();
+      if (results.length > 0) {
+        router.push(`/vehicle/${results[0].id}`);
+        return;
+      }
+    } catch {}
+    // Fallback: free-form research query (AI chat still works, specs may not)
+    router.push(`/vehicle/${encodeURIComponent(slugify(query))}`);
   }
 
   function toggleCompare(id: string) {
@@ -217,7 +294,7 @@ export default function HomePage() {
       <section className="max-w-6xl mx-auto px-4 pb-20 flex gap-6 items-start">
         {/* Vehicles Grid */}
         <div className="flex-1 min-w-0">
-          <div className="flex items-center justify-between mb-6">
+          <div className="flex items-center justify-between mb-4">
             <h2 className="text-2xl font-semibold">Popular Vehicles</h2>
             {compareList.length >= 2 && (
               <Button onClick={goToCompare} variant="outline" className="gap-2">
@@ -227,9 +304,49 @@ export default function HomePage() {
             )}
           </div>
 
+          {/* Vehicle search / add to grid */}
+          <div ref={searchRef} className="relative mb-6">
+            <div className="relative">
+              <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+              <Input
+                className="pl-10 pr-10"
+                placeholder="Add a vehicle to compare… (e.g. Toyota, Camry, 2024 BMW)"
+                value={vehicleSearch}
+                onChange={(e) => {
+                  setVehicleSearch(e.target.value);
+                  setShowSuggestions(true);
+                }}
+                onFocus={() => setShowSuggestions(true)}
+              />
+              {searchLoading && (
+                <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />
+              )}
+            </div>
+            {showSuggestions && suggestions.length > 0 && (
+              <div className="absolute z-20 mt-1 w-full bg-popover border rounded-md shadow-lg overflow-hidden">
+                {suggestions.map((v) => (
+                  <button
+                    key={v.id}
+                    className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted flex items-center justify-between gap-2"
+                    onMouseDown={(e) => {
+                      e.preventDefault();
+                      addVehicleToGrid(v);
+                    }}
+                  >
+                    <span>
+                      <span className="font-medium">{v.year} {v.make} {v.model}</span>
+                    </span>
+                    <Badge variant="secondary" className="shrink-0 text-xs">{v.category}</Badge>
+                  </button>
+                ))}
+              </div>
+            )}
+          </div>
+
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            {FEATURED_VEHICLES.map((vehicle) => {
+            {allGridVehicles.map((vehicle) => {
               const selected = compareList.includes(vehicle.id);
+              const isAdded = addedVehicles.some((v) => v.id === vehicle.id);
               return (
                 <Card
                   key={vehicle.id}
@@ -245,13 +362,25 @@ export default function HomePage() {
                           {vehicle.category}
                         </Badge>
                       </div>
-                      <Button
-                        variant={selected ? "default" : "outline"}
-                        size="sm"
-                        onClick={() => toggleCompare(vehicle.id)}
-                      >
-                        {selected ? "Added" : "+ Compare"}
-                      </Button>
+                      <div className="flex items-center gap-1">
+                        <Button
+                          variant={selected ? "default" : "outline"}
+                          size="sm"
+                          onClick={() => toggleCompare(vehicle.id)}
+                        >
+                          {selected ? "Added" : "+ Compare"}
+                        </Button>
+                        {isAdded && (
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-8 w-8 text-muted-foreground hover:text-destructive"
+                            onClick={() => removeAddedVehicle(vehicle.id)}
+                          >
+                            <X className="h-3.5 w-3.5" />
+                          </Button>
+                        )}
+                      </div>
                     </div>
                   </CardHeader>
                   <CardContent>
