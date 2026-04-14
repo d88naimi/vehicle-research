@@ -1,0 +1,47 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <!-- Background -->
+  <rect width="64" height="64" rx="12" fill="#0f172a"/>
+
+  <!-- Car body - sleek low profile -->
+  <path d="M6 38 Q8 34 14 32 L22 24 Q26 21 34 21 L44 21 Q50 21 54 25 L58 30 Q60 32 58 34 L58 38 Z" fill="#e11d48"/>
+
+  <!-- Windshield -->
+  <path d="M24 24 L22 32 L44 32 L44 24 Z" fill="#7dd3fc" opacity="0.85"/>
+
+  <!-- Roof -->
+  <path d="M24 24 L30 21 L44 21 L44 24 Z" fill="#be123c"/>
+
+  <!-- Side window -->
+  <path d="M22 24 L20 32 L24 32 L26 24 Z" fill="#7dd3fc" opacity="0.7"/>
+
+  <!-- Car undercarriage / skirt -->
+  <rect x="8" y="38" width="48" height="4" rx="1" fill="#9f1239"/>
+
+  <!-- Front wheel arch -->
+  <path d="M10 42 Q10 36 18 36 Q26 36 26 42 Z" fill="#0f172a"/>
+
+  <!-- Rear wheel arch -->
+  <path d="M38 42 Q38 36 46 36 Q54 36 54 42 Z" fill="#0f172a"/>
+
+  <!-- Front wheel -->
+  <circle cx="18" cy="43" r="6" fill="#1e293b"/>
+  <circle cx="18" cy="43" r="4" fill="#334155"/>
+  <circle cx="18" cy="43" r="2" fill="#94a3b8"/>
+
+  <!-- Rear wheel -->
+  <circle cx="46" cy="43" r="6" fill="#1e293b"/>
+  <circle cx="46" cy="43" r="4" fill="#334155"/>
+  <circle cx="46" cy="43" r="2" fill="#94a3b8"/>
+
+  <!-- Headlight -->
+  <ellipse cx="57" cy="32" rx="2" ry="3" fill="#fef08a" opacity="0.9"/>
+
+  <!-- Tail light -->
+  <rect x="6" y="33" width="3" height="4" rx="1" fill="#f97316" opacity="0.9"/>
+
+  <!-- Hood scoop / spoiler detail -->
+  <rect x="44" y="22" width="8" height="2" rx="1" fill="#9f1239"/>
+
+  <!-- Ground shadow -->
+  <ellipse cx="32" cy="50" rx="24" ry="2" fill="#000" opacity="0.3"/>
+</svg>
