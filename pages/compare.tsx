@@ -136,8 +136,15 @@ export default function ComparePage() {
           const data = line.slice(6);
           if (data === "[DONE]") break;
           try {
-            const { text } = JSON.parse(data);
-            assistantText += text;
+            const parsed = JSON.parse(data);
+            if (parsed.error) {
+              setMessages((prev) => [
+                ...prev.slice(0, -1),
+                { role: "assistant", content: "Sorry, something went wrong. Please try again." },
+              ]);
+              break;
+            }
+            assistantText += parsed.text ?? "";
             setMessages((prev) => [
               ...prev.slice(0, -1),
               { role: "assistant", content: assistantText },

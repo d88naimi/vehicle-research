@@ -50,29 +50,14 @@ export default async function handler(
   res.setHeader("X-Accel-Buffering", "no");
 
   try {
-    const systemBlocks: Anthropic.TextBlockParam[] = [
-      {
-        type: "text",
-        text: SYSTEM_PROMPT,
-        // Cache the static system prompt — it never changes between requests
-        cache_control: { type: "ephemeral" },
-      },
-    ];
-
-    // Cache per-vehicle context separately so it survives across messages
-    // in the same research session
-    if (vehicleContext) {
-      systemBlocks.push({
-        type: "text",
-        text: vehicleContext,
-        cache_control: { type: "ephemeral" },
-      });
-    }
+    const systemText = vehicleContext
+      ? `${SYSTEM_PROMPT}\n\n${vehicleContext}`
+      : SYSTEM_PROMPT;
 
     const stream = anthropic.messages.stream({
-      model: "claude-opus-4-6",
+      model: "claude-opus-4-5",
       max_tokens: 1024,
-      system: systemBlocks,
+      system: systemText,
       messages,
     });
 
