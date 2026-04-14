@@ -50,9 +50,11 @@ export default async function handler(
 
   if (!tavilyRes.ok) {
     const err = await tavilyRes.json().catch(() => ({}));
-    return res
-      .status(tavilyRes.status)
-      .json({ error: (err as { message?: string }).message ?? "Tavily API error" });
+    const errMsg =
+      (err as { message?: string; detail?: string }).message ??
+      (err as { detail?: string }).detail ??
+      `Tavily error ${tavilyRes.status}`;
+    return res.status(tavilyRes.status).json({ error: errMsg });
   }
 
   const data = await tavilyRes.json();
