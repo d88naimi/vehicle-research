@@ -187,16 +187,33 @@ export default function VehiclePage() {
             <Button variant="ghost" size="icon" onClick={() => router.back()}>
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            <div>
+            <button
+              className="hover:opacity-80 transition-opacity text-left"
+              onClick={() => router.push("/")}
+            >
               <h1 className="font-bold text-xl">
                 {formatVehicleTitle(vehicleId)}
               </h1>
               <p className="text-xs text-muted-foreground">
                 AI-curated research
               </p>
-            </div>
+            </button>
           </div>
           <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push("/research")}
+            >
+              Research
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push("/")}
+            >
+              Service Advisor
+            </Button>
             <Button
               variant="outline"
               size="sm"

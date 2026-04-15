@@ -194,9 +194,28 @@ export default function ComparePage() {
             >
               <ArrowLeft className="h-4 w-4" />
             </Button>
-            <h1 className="font-bold text-xl">Compare Vehicles</h1>
+            <button
+              className="font-bold text-xl hover:opacity-80 transition-opacity"
+              onClick={() => router.push("/")}
+            >
+              VehicleIQ
+            </button>
           </div>
           <div className="flex gap-2">
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push("/research")}
+            >
+              Research
+            </Button>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push("/")}
+            >
+              Service Advisor
+            </Button>
             <Button
               variant="outline"
               size="sm"
