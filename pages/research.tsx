@@ -301,12 +301,24 @@ export default function HomePage() {
             />
             <span className="font-bold text-xl">VehicleIQ</span>
           </button>
-          <nav className="flex items-center gap-4">
-            <Button variant="ghost" onClick={() => router.push("/compare")}>
+          <nav className="flex items-center gap-3">
+            <div className="flex items-center bg-muted rounded-lg p-1 gap-0.5">
+              <button className="px-3 py-1.5 text-sm font-medium bg-background shadow-sm rounded-md">
+                Research
+              </button>
+              <button
+                className="px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground rounded-md transition-colors"
+                onClick={() => router.push("/")}
+              >
+                AI Service Advisor
+              </button>
+            </div>
+            <Button
+              variant="ghost"
+              size="sm"
+              onClick={() => router.push("/compare")}
+            >
               Compare
-            </Button>
-            <Button variant="ghost" onClick={() => router.push("/")}>
-              Service Advisor
             </Button>
           </nav>
         </div>

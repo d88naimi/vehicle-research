@@ -199,21 +199,21 @@ export default function VehiclePage() {
               </p>
             </button>
           </div>
-          <div className="flex gap-2">
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => router.push("/research")}
-            >
-              Research
-            </Button>
-            <Button
-              variant="ghost"
-              size="sm"
-              onClick={() => router.push("/")}
-            >
-              Service Advisor
-            </Button>
+          <div className="flex gap-2 items-center">
+            <div className="flex items-center bg-muted rounded-lg p-1 gap-0.5 mr-1">
+              <button
+                className="px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground rounded-md transition-colors"
+                onClick={() => router.push("/research")}
+              >
+                Research
+              </button>
+              <button
+                className="px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground rounded-md transition-colors"
+                onClick={() => router.push("/")}
+              >
+                AI Service Advisor
+              </button>
+            </div>
             <Button
               variant="outline"
               size="sm"

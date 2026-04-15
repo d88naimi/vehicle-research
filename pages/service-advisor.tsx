@@ -1,7 +1,7 @@
 import type { GetServerSideProps } from "next";
 
-// Service Advisor has moved to the home page (/).
-// This redirect keeps any old bookmarks or links working.
+// Service Advisor lives at / (the home page).
+// This keeps any old bookmarks or links working.
 export const getServerSideProps: GetServerSideProps = async () => {
   return {
     redirect: {
