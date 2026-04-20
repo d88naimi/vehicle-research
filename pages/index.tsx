@@ -51,14 +51,52 @@ interface ServiceReport {
   notes: string;
 }
 
-const EXAMPLE_SYMPTOMS = [
-  "Grinding noise when braking",
-  "Car vibrates at highway speeds",
-  "Check engine light is on",
-  "Hard to start in the morning",
-  "AC is blowing warm air",
-  "Steering pulls to the left",
+const SYMPTOM_CATEGORIES = [
+  { value: "noise", label: "Noise", hint: "grinding, clicking, knocking" },
+  { value: "warning_light", label: "Warning Light", hint: "check engine, ABS, etc." },
+  { value: "performance", label: "Performance Issue", hint: "stalling, loss of power" },
+  { value: "vibration", label: "Vibration / Shaking", hint: "steering wheel, body, pedal" },
+  { value: "fluid_leak", label: "Fluid Leak", hint: "oil, coolant, brake fluid" },
+  { value: "smell_smoke", label: "Smell / Smoke", hint: "burning, exhaust, gas smell" },
+  { value: "electrical", label: "Electrical Issue", hint: "lights, battery, accessories" },
+  { value: "other", label: "Other", hint: "anything not listed above" },
 ];
+
+const WHEN_OPTIONS = [
+  "When starting / cold engine",
+  "While braking",
+  "While turning",
+  "At highway speeds (50+ mph)",
+  "At low speeds",
+  "When accelerating",
+  "When idling",
+  "All the time",
+];
+
+const DURATION_OPTIONS = [
+  "Just started today",
+  "A few days",
+  "A few weeks",
+  "Over a month",
+];
+
+interface SymptomAnswers {
+  category: string;
+  whenOccurs: string[];
+  duration: string;
+  details: string;
+}
+
+function buildSymptomsText(answers: SymptomAnswers): string {
+  const parts: string[] = [];
+  const cat = SYMPTOM_CATEGORIES.find((c) => c.value === answers.category);
+  if (cat) parts.push(`Issue type: ${cat.label} (${cat.hint})`);
+  if (answers.whenOccurs.length > 0)
+    parts.push(`Occurs: ${answers.whenOccurs.join(", ")}`);
+  if (answers.duration) parts.push(`Duration: ${answers.duration}`);
+  if (answers.details.trim()) parts.push(`Additional details: ${answers.details.trim()}`);
+  return parts.join(". ");
+}
 
 export default function ServiceAdvisorPage() {
   const router = useRouter();
@@ -72,8 +110,13 @@ export default function ServiceAdvisorPage() {
   const searchRef = useRef<HTMLDivElement>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  // Symptom state
-  const [symptoms, setSymptoms] = useState("");
+  // Symptom questionnaire state
+  const [symptomAnswers, setSymptomAnswers] = useState<SymptomAnswers>({
+    category: "",
+    whenOccurs: [],
+    duration: "",
+    details: "",
+  });
 
   // Report state
   const [report, setReport] = useState<ServiceReport | null>(null);
@@ -200,7 +243,10 @@ export default function ServiceAdvisorPage() {
     setSuggestions([]);
   }
 
-  const canSubmit = selectedVehicle !== null && symptoms.trim().length > 5;
+  const canSubmit =
+    selectedVehicle !== null &&
+    symptomAnswers.category !== "" &&
+    symptomAnswers.whenOccurs.length > 0;
 
   async function handleSubmit(e: React.FormEvent) {
     e.preventDefault();
@@ -217,7 +263,7 @@ export default function ServiceAdvisorPage() {
           year: selectedVehicle.year,
           make: selectedVehicle.make,
           model: selectedVehicle.model,
-          symptoms: symptoms.trim(),
+          symptoms: buildSymptomsText(symptomAnswers),
         }),
       });
 
@@ -243,7 +289,7 @@ export default function ServiceAdvisorPage() {
     setSubmitError(null);
     setSelectedVehicle(null);
     setVehicleSearch("");
-    setSymptoms("");
+    setSymptomAnswers({ category: "", whenOccurs: [], duration: "", details: "" });
   }
 
   function updateItem(id: string, updates: Partial<ServiceItem>) {
@@ -284,19 +330,19 @@ export default function ServiceAdvisorPage() {
   const PRIORITY_CONFIG = {
     urgent: {
       label: "Urgent",
-      icon: <AlertTriangle className="h-3.5 w-3.5" />,
+      icon: <AlertTriangle aria-hidden="true" className="h-3.5 w-3.5" />,
       classes: "bg-red-50 border-red-200 text-red-700",
       badge: "bg-red-100 text-red-700",
     },
     recommended: {
       label: "Recommended",
-      icon: <CheckCircle className="h-3.5 w-3.5" />,
+      icon: <CheckCircle aria-hidden="true" className="h-3.5 w-3.5" />,
       classes: "bg-yellow-50 border-yellow-200 text-yellow-800",
       badge: "bg-yellow-100 text-yellow-800",
     },
     optional: {
       label: "Optional",
-      icon: <Circle className="h-3.5 w-3.5" />,
+      icon: <Circle aria-hidden="true" className="h-3.5 w-3.5" />,
       classes: "bg-muted/40 border-border text-foreground",
       badge: "bg-muted text-muted-foreground",
     },
@@ -320,6 +366,7 @@ export default function ServiceAdvisorPage() {
           <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
             <button
               className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+              aria-label="Go to VehicleIQ home"
               onClick={() => router.push("/")}
             >
               <img
@@ -330,7 +377,7 @@ export default function ServiceAdvisorPage() {
               />
               <span className="font-bold text-xl">VehicleIQ</span>
             </button>
-            <nav className="flex items-center gap-4">
+            <nav aria-label="Main navigation" className="flex items-center gap-4">
               <Button variant="ghost" onClick={() => router.push("/research")}>
                 Research
               </Button>
@@ -344,7 +391,7 @@ export default function ServiceAdvisorPage() {
         {/* Invoice */}
         <section className="max-w-3xl mx-auto px-4 py-10 pb-20">
           {/* Title row */}
-          <div className="flex items-start justify-between mb-6">
+          <div className="flex flex-wrap items-start justify-between gap-3 mb-6">
             <div>
               <h2 className="text-2xl font-bold">Service Quote</h2>
               <p className="text-muted-foreground text-sm mt-0.5">
@@ -361,9 +408,9 @@ export default function ServiceAdvisorPage() {
                 disabled={exportingPdf}
               >
                 {exportingPdf ? (
-                  <Loader2 className="h-3.5 w-3.5 animate-spin" />
+                  <Loader2 aria-hidden="true" className="h-3.5 w-3.5 animate-spin" />
                 ) : (
-                  <FileText className="h-3.5 w-3.5" />
+                  <FileText aria-hidden="true" className="h-3.5 w-3.5" />
                 )}
                 Export PDF
               </Button>
@@ -373,7 +420,7 @@ export default function ServiceAdvisorPage() {
                 className="gap-2"
                 onClick={handleReset}
               >
-                <RotateCcw className="h-3.5 w-3.5" />
+                <RotateCcw aria-hidden="true" className="h-3.5 w-3.5" />
                 New quote
               </Button>
             </div>
@@ -403,7 +450,7 @@ export default function ServiceAdvisorPage() {
                     {/* Priority cycle button */}
                     <button
                       type="button"
-                      title="Click to change priority"
+                      aria-label={`Priority: ${cfg.label}. Click to change.`}
                       onClick={() => {
                         const next =
                           priorities[
@@ -423,6 +470,7 @@ export default function ServiceAdvisorPage() {
                       <input
                         type="text"
                         value={item.service}
+                        aria-label="Service name"
                         onChange={(e) =>
                           updateItem(item.id, { service: e.target.value })
                         }
@@ -432,6 +480,7 @@ export default function ServiceAdvisorPage() {
                       <input
                         type="text"
                         value={item.diagnosis}
+                        aria-label="Diagnosis description"
                         onChange={(e) =>
                           updateItem(item.id, { diagnosis: e.target.value })
                         }
@@ -446,6 +495,7 @@ export default function ServiceAdvisorPage() {
                           min={0.1}
                           max={20}
                           step={0.5}
+                          aria-label="Labor hours"
                           onChange={(e) =>
                             updateItem(item.id, {
                               laborHours: Math.max(0.1, Number(e.target.value)),
@@ -454,13 +504,14 @@ export default function ServiceAdvisorPage() {
                           className="w-14 text-center bg-transparent border-b border-current outline-none"
                         />
                         <span>h labor</span>
-                        <span className="mx-1">+</span>
-                        <span>$</span>
+                        <span className="mx-1" aria-hidden="true">+</span>
+                        <span aria-hidden="true">$</span>
                         <input
                           type="number"
                           value={item.partsCost}
                           min={0}
                           step={5}
+                          aria-label="Parts cost in dollars"
                           onChange={(e) =>
                             updateItem(item.id, {
                               partsCost: Math.max(0, Number(e.target.value)),
@@ -476,11 +527,11 @@ export default function ServiceAdvisorPage() {
                     <div className="shrink-0 text-right flex flex-col items-end gap-2">
                       <button
                         type="button"
+                        aria-label={`Remove ${item.service}`}
                         onClick={() => removeItem(item.id)}
-                        className="text-muted-foreground hover:text-destructive transition-colors"
-                        title="Remove this item"
+                        className="text-muted-foreground hover:text-destructive transition-colors p-1 -m-1 rounded"
                       >
-                        <X className="h-3.5 w-3.5" />
+                        <X aria-hidden="true" className="h-3.5 w-3.5" />
                       </button>
                       <p className="font-bold text-sm">
                         ${itemTotal.toFixed(2)}
@@ -498,22 +549,26 @@ export default function ServiceAdvisorPage() {
             onClick={addItem}
             className="w-full flex items-center justify-center gap-2 py-2 mb-6 text-sm text-muted-foreground border border-dashed rounded-lg hover:border-primary hover:text-primary transition-colors"
           >
-            <Plus className="h-4 w-4" />
+            <Plus aria-hidden="true" className="h-4 w-4" />
             Add service item
           </button>
 
           {/* Totals + labor rate */}
           <div className="rounded-lg border bg-card p-4 space-y-3">
             <div className="flex items-center justify-between text-sm">
-              <span className="text-muted-foreground">Labor rate</span>
+              <label htmlFor="labor-rate" className="text-muted-foreground">
+                Labor rate
+              </label>
               <div className="flex items-center gap-1.5">
-                <span className="text-muted-foreground">$</span>
+                <span aria-hidden="true" className="text-muted-foreground">$</span>
                 <input
+                  id="labor-rate"
                   type="number"
                   min={50}
                   max={500}
                   step={5}
                   value={laborRate}
+                  aria-label="Labor rate per hour in dollars"
                   onChange={(e) =>
                     setLaborRate(Math.max(50, Number(e.target.value)))
                   }
@@ -545,6 +600,13 @@ export default function ServiceAdvisorPage() {
             </p>
           )}
 
+          {/* Error */}
+          {submitError && (
+            <p role="alert" className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2 mt-4">
+              {submitError}
+            </p>
+          )}
+
           {/* Mechanic Finder */}
           <MechanicFinder
             zipCode={zipCode}
@@ -564,9 +626,10 @@ export default function ServiceAdvisorPage() {
     <div className="min-h-screen bg-background">
       {/* Header */}
       <header className="border-b">
-        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between">
+        <div className="max-w-6xl mx-auto px-4 py-4 flex items-center justify-between gap-2">
           <button
-            className="flex items-center gap-2 hover:opacity-80 transition-opacity"
+            className="flex items-center gap-2 hover:opacity-80 transition-opacity shrink-0"
+            aria-label="Go to VehicleIQ home"
             onClick={() => router.push("/")}
           >
             <img
@@ -577,7 +640,7 @@ export default function ServiceAdvisorPage() {
             />
             <span className="font-bold text-xl">VehicleIQ</span>
           </button>
-          <nav className="flex items-center gap-3">
+          <nav aria-label="Main navigation" className="flex items-center gap-3 flex-wrap justify-end">
             <div className="flex items-center bg-muted rounded-lg p-1 gap-0.5">
               <button
                 className="px-3 py-1.5 text-sm font-medium text-muted-foreground hover:text-foreground rounded-md transition-colors"
@@ -585,7 +648,10 @@ export default function ServiceAdvisorPage() {
               >
                 Research
               </button>
-              <button className="px-3 py-1.5 text-sm font-medium bg-background shadow-sm rounded-md">
+              <button
+                className="px-3 py-1.5 text-sm font-medium bg-background shadow-sm rounded-md"
+                aria-current="page"
+              >
                 AI Service Advisor
               </button>
             </div>
@@ -601,11 +667,11 @@ export default function ServiceAdvisorPage() {
       </header>
 
       {/* Hero */}
-      <section className="max-w-2xl mx-auto px-4 py-16 text-center">
-        <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 mb-5">
+      <section className="max-w-2xl mx-auto px-4 py-10 sm:py-16 text-center">
+        <div className="inline-flex items-center justify-center w-14 h-14 rounded-full bg-primary/10 mb-5" aria-hidden="true">
           <Wrench className="h-7 w-7 text-primary" />
         </div>
-        <h1 className="text-4xl font-bold tracking-tight mb-3">
+        <h1 className="text-3xl sm:text-4xl font-bold tracking-tight mb-3">
           AI Service Advisor
         </h1>
         <p className="text-lg text-muted-foreground">
@@ -616,16 +682,25 @@ export default function ServiceAdvisorPage() {
 
       {/* Form */}
       <section className="max-w-2xl mx-auto px-4 pb-20">
-        <form onSubmit={handleSubmit} className="space-y-5">
+        <form onSubmit={handleSubmit} className="space-y-5" aria-label="Service diagnosis form">
           {/* Vehicle search */}
           <div className="space-y-2">
-            <label className="text-sm font-medium">Your Vehicle</label>
+            <label htmlFor="vehicle-search" className="text-sm font-medium">
+              Your Vehicle
+            </label>
             <div ref={searchRef} className="relative">
               <div className="relative">
-                <Search className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
+                <Search aria-hidden="true" className="absolute left-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground" />
                 <Input
+                  id="vehicle-search"
                   className="pl-10 pr-10 h-12"
                   placeholder="Search year, make, or model… (e.g. 2021 Honda Civic)"
+                  autoComplete="off"
+                  role="combobox"
+                  aria-autocomplete="list"
+                  aria-expanded={showSuggestions && suggestions.length > 0}
+                  aria-controls="vehicle-suggestions"
+                  aria-haspopup="listbox"
                   value={vehicleSearch}
                   onChange={(e) => {
                     setVehicleSearch(e.target.value);
@@ -633,92 +708,205 @@ export default function ServiceAdvisorPage() {
                     setShowSuggestions(true);
                   }}
                   onFocus={() => setShowSuggestions(true)}
+                  onKeyDown={(e) => {
+                    if (e.key === "Escape") setShowSuggestions(false);
+                  }}
                 />
                 {searchLoading && (
-                  <Loader2 className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />
+                  <Loader2 aria-hidden="true" className="absolute right-3 top-1/2 -translate-y-1/2 h-4 w-4 text-muted-foreground animate-spin" />
                 )}
                 {selectedVehicle && !searchLoading && (
                   <button
                     type="button"
+                    aria-label="Clear vehicle selection"
                     onClick={clearVehicle}
-                    className="absolute right-3 top-1/2 -translate-y-1/2 text-xs text-muted-foreground hover:text-foreground"
+                    className="absolute right-3 top-1/2 -translate-y-1/2 p-1 text-muted-foreground hover:text-foreground"
                   >
-                    ✕
+                    <X aria-hidden="true" className="h-3.5 w-3.5" />
                   </button>
                 )}
               </div>
 
               {showSuggestions && suggestions.length > 0 && (
-                <div className="absolute z-20 mt-1 w-full bg-popover border rounded-md shadow-lg overflow-hidden">
+                <ul
+                  id="vehicle-suggestions"
+                  role="listbox"
+                  aria-label="Vehicle suggestions"
+                  className="absolute z-20 mt-1 w-full bg-popover border rounded-md shadow-lg overflow-hidden"
+                >
                   {suggestions.map((v) => (
-                    <button
-                      key={v.id}
-                      type="button"
-                      className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted flex items-center justify-between gap-2"
-                      onMouseDown={(e) => {
-                        e.preventDefault();
-                        selectVehicle(v);
-                      }}
-                    >
-                      <span className="font-medium">
-                        {v.year} {v.make} {v.model}
-                      </span>
-                      <Badge variant="secondary" className="shrink-0 text-xs">
-                        {v.category}
-                      </Badge>
-                    </button>
+                    <li key={v.id} role="option" aria-selected={selectedVehicle?.id === v.id}>
+                      <button
+                        type="button"
+                        className="w-full text-left px-4 py-2.5 text-sm hover:bg-muted flex items-center justify-between gap-2"
+                        onMouseDown={(e) => {
+                          e.preventDefault();
+                          selectVehicle(v);
+                        }}
+                      >
+                        <span className="font-medium">
+                          {v.year} {v.make} {v.model}
+                        </span>
+                        <Badge variant="secondary" className="shrink-0 text-xs">
+                          {v.category}
+                        </Badge>
+                      </button>
+                    </li>
                   ))}
-                </div>
+                </ul>
               )}
             </div>
 
             {selectedVehicle && (
-              <p className="text-xs text-green-600 font-medium pl-1">
+              <p className="text-xs text-green-600 font-medium pl-1" aria-live="polite">
                 ✓ {selectedVehicle.year} {selectedVehicle.make}{" "}
                 {selectedVehicle.model} selected
               </p>
             )}
           </div>
 
-          {/* Symptom input */}
-          <div className="space-y-2">
-            <label className="text-sm font-medium">Describe the Symptoms</label>
-            <textarea
-              className="w-full min-h-[120px] rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
-              placeholder="Describe what you're experiencing… (e.g. grinding noise when braking at low speeds, especially in the morning)"
-              value={symptoms}
-              onChange={(e) => setSymptoms(e.target.value)}
-            />
-            <p className="text-xs text-muted-foreground pl-1">
-              Be as specific as possible — when it happens, how often, any
-              recent changes.
-            </p>
-          </div>
-
-          {/* Example symptoms */}
-          {symptoms.trim().length === 0 && (
-            <div className="space-y-2">
-              <p className="text-xs text-muted-foreground font-medium">
-                Common symptoms:
+          {/* Symptom questionnaire */}
+          <div className="space-y-5">
+            {/* Q1: Issue type */}
+            <div
+              role="radiogroup"
+              aria-labelledby="q1-label"
+              aria-required="true"
+              className="space-y-2"
+            >
+              <p id="q1-label" className="text-sm font-medium">
+                1. What type of issue are you experiencing?
+                <span aria-hidden="true" className="text-destructive ml-1">*</span>
               </p>
-              <div className="flex flex-wrap gap-2">
-                {EXAMPLE_SYMPTOMS.map((s) => (
+              <div className="grid grid-cols-2 gap-2">
+                {SYMPTOM_CATEGORIES.map((cat) => (
                   <button
-                    key={s}
+                    key={cat.value}
                     type="button"
-                    className="text-xs px-3 py-1.5 rounded-full border hover:bg-muted transition-colors"
-                    onClick={() => setSymptoms(s)}
+                    role="radio"
+                    aria-checked={symptomAnswers.category === cat.value}
+                    onClick={() =>
+                      setSymptomAnswers((prev) => ({
+                        ...prev,
+                        category: prev.category === cat.value ? "" : cat.value,
+                      }))
+                    }
+                    className={`text-left px-3 py-2 rounded-md border text-sm transition-colors ${
+                      symptomAnswers.category === cat.value
+                        ? "border-primary bg-primary/10 text-primary font-medium"
+                        : "hover:bg-muted"
+                    }`}
                   >
-                    {s}
+                    <span className="block font-medium">{cat.label}</span>
+                    <span className="block text-xs text-muted-foreground">
+                      {cat.hint}
+                    </span>
                   </button>
                 ))}
               </div>
             </div>
-          )}
+
+            {/* Q2: When it occurs */}
+            <div
+              role="group"
+              aria-labelledby="q2-label"
+              aria-required="true"
+              className="space-y-2"
+            >
+              <p id="q2-label" className="text-sm font-medium">
+                2. When does it happen?
+                <span aria-hidden="true" className="text-destructive ml-1">*</span>
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {WHEN_OPTIONS.map((opt) => {
+                  const selected = symptomAnswers.whenOccurs.includes(opt);
+                  return (
+                    <button
+                      key={opt}
+                      type="button"
+                      role="checkbox"
+                      aria-checked={selected}
+                      onClick={() =>
+                        setSymptomAnswers((prev) => ({
+                          ...prev,
+                          whenOccurs: selected
+                            ? prev.whenOccurs.filter((w) => w !== opt)
+                            : [...prev.whenOccurs, opt],
+                        }))
+                      }
+                      className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                        selected
+                          ? "border-primary bg-primary/10 text-primary font-medium"
+                          : "hover:bg-muted"
+                      }`}
+                    >
+                      {opt}
+                    </button>
+                  );
+                })}
+              </div>
+            </div>
+
+            {/* Q3: Duration */}
+            <div
+              role="radiogroup"
+              aria-labelledby="q3-label"
+              className="space-y-2"
+            >
+              <p id="q3-label" className="text-sm font-medium">
+                3. How long has this been happening?
+              </p>
+              <div className="flex flex-wrap gap-2">
+                {DURATION_OPTIONS.map((opt) => (
+                  <button
+                    key={opt}
+                    type="button"
+                    role="radio"
+                    aria-checked={symptomAnswers.duration === opt}
+                    onClick={() =>
+                      setSymptomAnswers((prev) => ({
+                        ...prev,
+                        duration: prev.duration === opt ? "" : opt,
+                      }))
+                    }
+                    className={`text-xs px-3 py-1.5 rounded-full border transition-colors ${
+                      symptomAnswers.duration === opt
+                        ? "border-primary bg-primary/10 text-primary font-medium"
+                        : "hover:bg-muted"
+                    }`}
+                  >
+                    {opt}
+                  </button>
+                ))}
+              </div>
+            </div>
+
+            {/* Q4: Additional details */}
+            <div className="space-y-2">
+              <label htmlFor="symptom-details" className="text-sm font-medium">
+                4. Any additional details?
+                <span className="text-xs text-muted-foreground ml-2 font-normal">
+                  optional
+                </span>
+              </label>
+              <textarea
+                id="symptom-details"
+                className="w-full min-h-20 rounded-md border border-input bg-background px-3 py-2 text-sm ring-offset-background placeholder:text-muted-foreground focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-offset-2 resize-none"
+                placeholder="Recent repairs, severity, specific sounds or smells, warning light codes…"
+                value={symptomAnswers.details}
+                onChange={(e) =>
+                  setSymptomAnswers((prev) => ({
+                    ...prev,
+                    details: e.target.value,
+                  }))
+                }
+              />
+            </div>
+          </div>
 
           {/* Error */}
           {submitError && (
-            <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
+            <p role="alert" className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2">
               {submitError}
             </p>
           )}
@@ -729,23 +917,24 @@ export default function ServiceAdvisorPage() {
             size="lg"
             className="w-full h-12 text-base gap-2"
             disabled={!canSubmit || submitting}
+            aria-busy={submitting}
           >
             {submitting ? (
               <>
-                <Loader2 className="h-4 w-4 animate-spin" />
+                <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
                 Analyzing symptoms…
               </>
             ) : (
               <>
                 Get Service Quote
-                <ChevronRight className="h-4 w-4" />
+                <ChevronRight aria-hidden="true" className="h-4 w-4" />
               </>
             )}
           </Button>
         </form>
 
         {/* How it works */}
-        <div className="mt-16 grid grid-cols-3 gap-6 text-center">
+        <div className="mt-16 grid grid-cols-1 sm:grid-cols-3 gap-6 text-center">
           {[
             {
               step: "1",
@@ -765,7 +954,7 @@ export default function ServiceAdvisorPage() {
           ].map(({ step, title, desc }) => (
             <Card key={step} className="border-dashed">
               <CardHeader className="pb-2">
-                <div className="w-8 h-8 rounded-full bg-primary/10 text-primary text-sm font-bold flex items-center justify-center mx-auto mb-2">
+                <div aria-hidden="true" className="w-8 h-8 rounded-full bg-primary/10 text-primary text-sm font-bold flex items-center justify-center mx-auto mb-2">
                   {step}
                 </div>
                 <CardTitle className="text-sm">{title}</CardTitle>
@@ -814,7 +1003,7 @@ function MechanicFinder({
   return (
     <div className="mt-12 border-t pt-10">
       <div className="flex items-center gap-2 mb-1">
-        <MapPin className="h-5 w-5 text-primary" />
+        <MapPin aria-hidden="true" className="h-5 w-5 text-primary" />
         <h3 className="text-lg font-semibold">Find a Mechanic Near You</h3>
       </div>
       <p className="text-sm text-muted-foreground mb-4">
@@ -822,7 +1011,11 @@ function MechanicFinder({
       </p>
 
       <form onSubmit={onSubmit} className="flex gap-2 max-w-sm">
+        <label htmlFor="zip-code" className="sr-only">
+          ZIP code
+        </label>
         <Input
+          id="zip-code"
           type="text"
           inputMode="numeric"
           maxLength={10}
@@ -830,15 +1023,17 @@ function MechanicFinder({
           value={zipCode}
           onChange={(e) => setZipCode(e.target.value.replace(/[^\d-]/g, ""))}
           className="h-10"
+          aria-label="ZIP code for mechanic search"
         />
         <Button
           type="submit"
           size="sm"
           className="h-10 px-4 shrink-0"
           disabled={!zipCode.trim() || searchingMechanics}
+          aria-busy={searchingMechanics}
         >
           {searchingMechanics ? (
-            <Loader2 className="h-4 w-4 animate-spin" />
+            <Loader2 aria-hidden="true" className="h-4 w-4 animate-spin" />
           ) : (
             "Search"
           )}
@@ -846,62 +1041,64 @@ function MechanicFinder({
       </form>
 
       {mechanicsError && (
-        <p className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2 mt-3 max-w-sm">
+        <p role="alert" className="text-sm text-destructive bg-destructive/10 rounded-md px-3 py-2 mt-3 max-w-sm">
           {mechanicsError}
         </p>
       )}
 
       {mechanicsSearched && mechanics.length === 0 && !mechanicsError && (
-        <p className="text-sm text-muted-foreground mt-4">
+        <p role="status" className="text-sm text-muted-foreground mt-4">
           No mechanics found near {zipCode}. Try a nearby ZIP code.
         </p>
       )}
 
       {mechanics.length > 0 && (
-        <div className="mt-5 space-y-3">
+        <ul className="mt-5 space-y-3" aria-label="Nearby mechanic shops">
           {mechanics.map((shop) => (
-            <a
-              key={shop.placeId}
-              href={shop.mapsUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex items-start justify-between gap-4 rounded-lg border p-4 hover:bg-muted/40 transition-colors group"
-            >
-              <div className="min-w-0 flex-1">
-                <div className="flex items-center gap-2 flex-wrap">
-                  <span className="font-semibold text-sm truncate">
-                    {shop.name}
-                  </span>
-                  {shop.isOpen === true && (
-                    <span className="text-xs text-green-600 font-medium shrink-0">
-                      Open now
+            <li key={shop.placeId}>
+              <a
+                href={shop.mapsUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                aria-label={`${shop.name}${shop.address ? `, ${shop.address}` : ""} — opens in new tab`}
+                className="flex items-start justify-between gap-4 rounded-lg border p-4 hover:bg-muted/40 transition-colors group"
+              >
+                <div className="min-w-0 flex-1">
+                  <div className="flex items-center gap-2 flex-wrap">
+                    <span className="font-semibold text-sm truncate">
+                      {shop.name}
                     </span>
-                  )}
-                  {shop.isOpen === false && (
-                    <span className="text-xs text-muted-foreground shrink-0">
-                      Closed
-                    </span>
+                    {shop.isOpen === true && (
+                      <span className="text-xs text-green-600 font-medium shrink-0">
+                        Open now
+                      </span>
+                    )}
+                    {shop.isOpen === false && (
+                      <span className="text-xs text-muted-foreground shrink-0">
+                        Closed
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
+                    {shop.address}
+                  </p>
+                  {shop.rating !== null && (
+                    <div className="flex items-center gap-1 mt-1">
+                      <Star aria-hidden="true" className="h-3 w-3 fill-yellow-400 text-yellow-400" />
+                      <span className="text-xs font-medium">
+                        {shop.rating.toFixed(1)}
+                      </span>
+                      <span className="text-xs text-muted-foreground">
+                        ({shop.totalRatings.toLocaleString()} reviews)
+                      </span>
+                    </div>
                   )}
                 </div>
-                <p className="text-xs text-muted-foreground mt-0.5 line-clamp-1">
-                  {shop.address}
-                </p>
-                {shop.rating !== null && (
-                  <div className="flex items-center gap-1 mt-1">
-                    <Star className="h-3 w-3 fill-yellow-400 text-yellow-400" />
-                    <span className="text-xs font-medium">
-                      {shop.rating.toFixed(1)}
-                    </span>
-                    <span className="text-xs text-muted-foreground">
-                      ({shop.totalRatings.toLocaleString()})
-                    </span>
-                  </div>
-                )}
-              </div>
-              <ExternalLink className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5 group-hover:text-primary transition-colors" />
-            </a>
+                <ExternalLink aria-hidden="true" className="h-4 w-4 text-muted-foreground shrink-0 mt-0.5 group-hover:text-primary transition-colors" />
+              </a>
+            </li>
           ))}
-        </div>
+        </ul>
       )}
     </div>
   );
